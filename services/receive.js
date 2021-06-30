@@ -18,6 +18,12 @@ const Curation = require("./curation"),
   GraphApi = require("./graph-api"),
   i18n = require("../i18n.config");
 
+// Imports the Google Cloud client library
+const language = require('@google-cloud/language');
+
+// Instantiates a client
+const client = new language.LanguageServiceClient();
+
 module.exports = class Receive {
   constructor(user, webhookEvent) {
     this.user = user;
@@ -67,54 +73,69 @@ module.exports = class Receive {
   }
 
   // Handles messages events with text
-  handleTextMessage() {
-    console.log(
-      "Received text:",
-      `${this.webhookEvent.message.text} for ${this.user.psid}`
-    );
+  async handleTextMessage() {
+    try {
+      const document = {
+        content: this.webhookEvent.message.text,
+        type: 'PLAIN_TEXT',
+      };
 
-    let event = this.webhookEvent;
+      const [result] = client.analyzeSentiment({document: document});
+      const sentiment = result.documentSentiment;
 
-    // check greeting is here and is confident
-    let greeting = this.firstEntity(event.message.nlp, "greetings");
-    let message = event.message.text.trim().toLowerCase();
+      console.log(
+        "Received text:",
+        `${this.webhookEvent.message.text} for ${this.user.psid}`
+      );
+      console.log(`Sentiment score: ${sentiment.score}`);
+      console.log(`Sentiment magnitude: ${sentiment.magnitude}`);
 
-    let response;
+      let event = this.webhookEvent;
 
-    if (
-      (greeting && greeting.confidence > 0.8) ||
-      message.includes("start over")
-    ) {
-      response = Response.genNuxMessage(this.user);
-    } else if (Number(message)) {
-      response = Order.handlePayload("ORDER_NUMBER");
-    } else if (message.includes("#")) {
-      response = Survey.handlePayload("CSAT_SUGGESTION");
-    } else if (message.includes(i18n.__("care.help").toLowerCase())) {
-      let care = new Care(this.user, this.webhookEvent);
-      response = care.handlePayload("CARE_HELP");
-    } else {
-      response = [
-        Response.genText(
-          i18n.__("fallback.any", {
-            message: event.message.text
-          })
-        ),
-        Response.genText(i18n.__("get_started.guidance")),
-        Response.genQuickReply(i18n.__("get_started.help"), [
-          {
-            title: i18n.__("menu.suggestion"),
-            payload: "CURATION"
-          },
-          {
-            title: i18n.__("menu.help"),
-            payload: "CARE_HELP"
-          }
-        ])
-      ];
-    }
+      // check greeting is here and is confident
+      let greeting = this.firstEntity(event.message.nlp, "greetings");
+      let message = event.message.text.trim().toLowerCase();
 
-    return response;
+      let response;
+
+      if (
+        (greeting && greeting.confidence > 0.8) ||
+        message.includes("start over")
+      ) {
+        response = Response.genNuxMessage(this.user);
+      } else if (Number(message)) {
+        response = Order.handlePayload("ORDER_NUMBER");
+      } else if (message.includes("#")) {
+        response = Survey.handlePayload("CSAT_SUGGESTION");
+      } else if (message.includes(i18n.__("care.help").toLowerCase())) {
+        let care = new Care(this.user, this.webhookEvent);
+        response = care.handlePayload("CARE_HELP");
+      } else {
+        response = [
+          Response.genText(
+            i18n.__("fallback.any", {
+              message: event.message.text
+            })
+          ),
+          Response.genText(i18n.__("get_started.guidance")),
+          Response.genQuickReply(i18n.__("get_started.help"), [
+            {
+              title: i18n.__("menu.suggestion"),
+              payload: "CURATION"
+            },
+            {
+              title: i18n.__("menu.help"),
+              payload: "CARE_HELP"
+            } 
+          ])
+        ];
+      }
+
+      return response;
+   
+    } catch (error) {
+      console.error(error);
+    } 
   }
 
   // Handles mesage events with attachments

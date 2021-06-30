@@ -22,6 +22,8 @@ const express = require("express"),
   i18n = require("./i18n.config"),
   app = express();
 
+//const language = require('@google-cloud/language');
+
 var users = {};
 
 // Parse application/x-www-form-urlencoded
